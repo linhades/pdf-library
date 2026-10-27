@@ -4,11 +4,13 @@ on:
   push:
     branches:
       - main
-workflow_dispatch: # 允許在網頁手動觸發
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: 取得專案程式碼
         uses: actions/checkout@v4
@@ -35,4 +37,4 @@ jobs:
       - name: 部署到 GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: pages # 最終發布包含網頁與檢索索引的資料夾
+          folder: pages
