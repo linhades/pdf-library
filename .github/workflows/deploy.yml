@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+workflow_dispatch: # 允許在網頁手動觸發
 
 jobs:
   build:
