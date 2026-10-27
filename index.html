@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>線上 PDF 智慧圖書館</title>
+    <!-- 引入 Pagefind 搜尋列樣式與 JS -->
+    <link href="pagefind/pagefind-ui.css" rel="stylesheet">
+    <script src="pagefind/pagefind-ui.js"></script>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; }
+        h1 { color: #2c3e50; }
+        .search-container { margin: 30px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h1>📚 線上 PDF 智慧圖書館</h1>
+    <p>歡迎使用無伺服器 PDF 全文檢索系統。您可以在下方直接搜尋所有文件的內容：</p>
+
+    <!-- Pagefind 搜尋框容器 -->
+    <div class="search-container">
+        <div id="search"></div>
+    </div>
+
+    <script>
+        window.addEventListener('DOMContentLoaded', (event) => {
+            new PagefindUI({ element: "#search", showSubResults: true });
+        });
+    </script>
+
+    <hr>
+    <h2>📖 現有書籍清單</h2>
+    <ul>
+        <li><a href="四聖諦_p1.html">四聖諦</a> (原始檔案: <a href="../pdfs/四聖諦.pdf" target="_blank">下載 PDF</a>)</li>
+
+    </ul>
+</body>
+</html>
