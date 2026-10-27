@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF 全文檢索圖書館</title>
+    <link href="/pagefind/pagefind-ui.css" rel="stylesheet">
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; }
+        .admin-link { float: right; color: #666; text-decoration: none; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <a href="/admin/" class="admin-link">⚙️ 管理員登入後台</a>
+    <h1>📚 PDF 智能全文檢索圖書館</h1>
+    <p>輸入關鍵字，即可跨越上萬頁文件，精確定位到頁碼：</p>
+
+    <div id="search"></div>
+
+    <script src="/pagefind/pagefind-ui.js"></script>
+    <script>
+        window.addEventListener('DOMContentLoaded', (event) => {
+            new PagefindUI({ element: "#search", showSubResults: true });
+        });
+    </script>
+</body>
+</html>

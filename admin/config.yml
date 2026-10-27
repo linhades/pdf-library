@@ -1,0 +1,17 @@
+backend:
+  name: github
+  repo: linhades/pdf-library
+  branch: main
+
+media_folder: "pdfs" # 上傳的 PDF 會自動存到這個資料夾
+public_folder: "/pdfs"
+
+collections:
+  - name: "documents"
+    label: "PDF 文件管理"
+    folder: "pdfs"
+    create: true
+    extension: "pdf"
+    format: "raw"
+    fields:
+      - {label: "檔案標題", name: "title", widget: "string"}

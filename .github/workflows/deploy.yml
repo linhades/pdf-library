@@ -1,0 +1,37 @@
+name: Auto Build and Deploy PDF Library
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取得專案程式碼
+        uses: actions/checkout@v4
+
+      - name: 設定 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 安裝轉檔套件
+        run: pip install pypdf
+
+      - name: 執行 Python 逐頁拆解轉檔
+        run: python build.py
+
+      - name: 設定 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 執行 Pagefind 建立海量搜尋索引
+        run: npx pagefind --source "pages"
+
+      - name: 部署到 GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: pages # 最終發布包含網頁與檢索索引的資料夾
