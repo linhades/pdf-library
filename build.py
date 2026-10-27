@@ -2,6 +2,11 @@ import os
 from pypdf import PdfReader
 
 pdf_dir = "pdfs"
+
+# 如果 pdfs 資料夾不存在，就自動建立它，避免噴出 FileNotFoundError
+if not os.path.exists(pdf_dir):
+    os.makedirs(pdf_dir)
+
 output_dir = "pages"
 os.makedirs(output_dir, exist_ok=True)
 
