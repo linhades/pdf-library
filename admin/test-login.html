@@ -3,70 +3,162 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PDF 圖書館管理員登入測試</title>
+  <title>PDF 圖書館管理後台</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
+    :root {
+      font-family: system-ui, -apple-system, sans-serif;
+      color: #202124;
+      background: #f5f6f8;
+    }
+
+    * { box-sizing: border-box; }
+
     body {
-      font-family: system-ui, sans-serif;
-      max-width: 680px;
-      margin: 40px auto;
-      padding: 0 20px;
-      line-height: 1.6;
+      max-width: 850px;
+      margin: 32px auto;
+      padding: 0 16px;
+      line-height: 1.65;
     }
+
+    h1 { font-size: 1.65rem; }
+    h2 { font-size: 1.15rem; margin-top: 0; }
+
+    .panel {
+      background: #fff;
+      border: 1px solid #e1e4e8;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 18px 0;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin: 12px 0 5px;
+    }
+
     input, button {
-      box-sizing: border-box;
-      width: 100%;
-      padding: 12px;
-      margin: 6px 0 14px;
-      font-size: 16px;
+      font: inherit;
+      padding: 10px 12px;
+      border-radius: 7px;
     }
-    button { cursor: pointer; }
+
+    input[type="email"],
+    input[type="password"],
+    input[type="file"] {
+      display: block;
+      width: 100%;
+      border: 1px solid #c8ccd0;
+      background: white;
+    }
+
+    button {
+      border: 0;
+      background: #1f5fbf;
+      color: white;
+      cursor: pointer;
+      margin: 8px 6px 0 0;
+    }
+
+    button.secondary { background: #555f6d; }
+    button.danger { background: #b42318; }
+    button:disabled { opacity: .55; cursor: wait; }
+
     #message {
       padding: 12px;
-      background: #f3f4f6;
+      border-radius: 8px;
+      background: #edf2f7;
       overflow-wrap: anywhere;
-    }
-    pre {
       white-space: pre-wrap;
+    }
+
+    .hint { color: #606770; font-size: .92rem; }
+    .file-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid #e8eaed;
+    }
+
+    .file-name {
       overflow-wrap: anywhere;
-      background: #f3f4f6;
-      padding: 12px;
+      min-width: 0;
+    }
+
+    .file-meta { color: #606770; font-size: .88rem; }
+    .file-actions { flex-shrink: 0; }
+
+    @media (max-width: 540px) {
+      .file-row { align-items: flex-start; flex-direction: column; }
+      .file-actions { width: 100%; }
+      .file-actions button { margin-left: 0; }
     }
   </style>
 </head>
 <body>
-  <h1>PDF 圖書館管理員登入測試</h1>
-  <p>此頁面只用於測試登入與讀取 PDF 清單。</p>
+  <h1>PDF 圖書館管理後台</h1>
+  <p class="hint">管理員登入後，可上傳或刪除 PDF，並觸發網站搜尋索引重建。</p>
 
-  <form id="login-form">
-    <label for="email">管理員 Email</label>
-    <input id="email" type="email" autocomplete="username"
-      required>
+  <section class="panel" id="login-panel">
+    <h2>管理員登入</h2>
+    <form id="login-form">
+      <label for="email">管理員 Email</label>
+      <input id="email" type="email" autocomplete="username" required>
 
-    <label for="password">管理員密碼</label>
-    <input id="password" type="password"
-      autocomplete="current-password" required>
+      <label for="password">管理員密碼</label>
+      <input id="password" type="password"
+        autocomplete="current-password" required>
 
-    <button id="login-button" type="submit">登入並讀取 PDF</button>
-  </form>
+      <button id="login-button" type="submit">登入</button>
+    </form>
+  </section>
 
-  <button id="logout-button" type="button" hidden>
-    登出
-  </button>
+  <section id="admin-panel" hidden>
+    <div class="panel">
+      <h2>PDF 管理</h2>
+      <form id="upload-form">
+        <label for="pdf-file">選擇 PDF 檔案</label>
+        <input id="pdf-file" type="file"
+          accept=".pdf,application/pdf" required>
+        <p class="hint">
+          支援中文檔名；單一檔案上限 20 MB。同名檔案不會被覆蓋。
+          若中文檔名遭 Storage 拒絕，請先保留錯誤訊息。
+        </p>
+        <button id="upload-button" type="submit">上傳 PDF</button>
+      </form>
 
-  <h2>測試結果</h2>
-  <div id="message" role="status" aria-live="polite">
-    尚未登入
-  </div>
-  <ul id="pdf-list"></ul>
+      <button id="refresh-button" class="secondary" type="button">
+        重新整理清單
+      </button>
+      <button id="logout-button" class="secondary" type="button">
+        登出
+      </button>
+    </div>
+
+    <div class="panel">
+      <h2>PDF 清單</h2>
+      <div id="pdf-list"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>操作狀態</h2>
+    <div id="message" role="status" aria-live="polite">尚未登入</div>
+  </section>
 
   <script>
-    // 請替換成你自己的 Supabase 公開設定
-    const SUPABASE_URL = "https://trxonorxzwryzwmswrew.supabase.co";
-    const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_Lz9XnzLTElFDdzviVAyc1A___AS9Fh_";
+    // 只放 Supabase 公開設定，絕不可放 Secret Key 或 GitHub Token。
+    const SUPABASE_URL =
+      "https://trxonorxzwryzwmswrew.supabase.co";
+    const SUPABASE_PUBLISHABLE_KEY =
+      "sb_publishable_Lz9XnzLTElFDdzviVAyc1A___AS9Fh_";
 
     const FUNCTION_URL =
       `${SUPABASE_URL}/functions/v1/pdf-admin`;
+    const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
     const client = supabase.createClient(
       SUPABASE_URL,
@@ -80,111 +172,275 @@
       }
     );
 
-    const form = document.getElementById("login-form");
+    const loginPanel = document.getElementById("login-panel");
+    const adminPanel = document.getElementById("admin-panel");
+    const loginForm = document.getElementById("login-form");
     const loginButton = document.getElementById("login-button");
+    const uploadForm = document.getElementById("upload-form");
+    const uploadButton = document.getElementById("upload-button");
+    const refreshButton = document.getElementById("refresh-button");
     const logoutButton = document.getElementById("logout-button");
-    const message = document.getElementById("message");
+    const pdfInput = document.getElementById("pdf-file");
     const pdfList = document.getElementById("pdf-list");
+    const message = document.getElementById("message");
+
+    let accessToken = null;
+    let busy = false;
 
     function showMessage(text) {
       message.textContent = text;
     }
 
-    function clearPdfList() {
-      pdfList.replaceChildren();
+    function setBusy(value) {
+      busy = value;
+      loginButton.disabled = value;
+      uploadButton.disabled = value;
+      refreshButton.disabled = value;
+      logoutButton.disabled = value;
     }
 
-    async function loadPdfList(accessToken) {
-      showMessage("登入成功，正在讀取 PDF 清單……");
-      clearPdfList();
+    async function callAdminApi(method, body) {
+      if (!accessToken) {
+        throw new Error("登入已失效，請重新登入。");
+      }
 
-      const response = await fetch(FUNCTION_URL, {
-        method: "GET",
-        headers: {
-          "apikey": SUPABASE_PUBLISHABLE_KEY,
-          "Authorization": `Bearer ${accessToken}`
-        }
-      });
+      const headers = {
+        "apikey": SUPABASE_PUBLISHABLE_KEY,
+        "Authorization": `Bearer ${accessToken}`
+      };
+
+      const options = { method, headers };
+
+      if (method === "POST") {
+        // multipart/form-data 必須讓瀏覽器自行設定 Content-Type boundary。
+        options.body = body;
+      } else if (method === "DELETE") {
+        headers["Content-Type"] = "application/json";
+        options.body = JSON.stringify(body);
+      }
+
+      let response;
+
+      try {
+        response = await fetch(FUNCTION_URL, options);
+      } catch {
+        throw new Error("無法連接管理後端，請檢查網路後重試。");
+      }
 
       const result = await response.json().catch(() => ({}));
 
-      if (!response.ok) {
+      if (response.status === 401) {
+        accessToken = null;
+        adminPanel.hidden = true;
+        loginPanel.hidden = false;
+        throw new Error("登入已失效，請重新登入。");
+      }
+
+      if (!response.ok || result.success !== true) {
         throw new Error(
-          `HTTP ${response.status}：${
-            result.message || result.error || "請求失敗"
-          }`
+          result.message || result.error ||
+          `請求失敗（HTTP ${response.status}）`
         );
       }
 
-      if (result.success !== true || !Array.isArray(result.data)) {
-        throw new Error("伺服器回傳格式不符合預期");
+      return result;
+    }
+
+    async function loadPdfList() {
+      showMessage("正在讀取 PDF 清單……");
+      pdfList.replaceChildren();
+
+      const result = await callAdminApi("GET");
+
+      for (const file of result.data) {
+        const row = document.createElement("div");
+        row.className = "file-row";
+
+        const details = document.createElement("div");
+        details.className = "file-name";
+
+        const name = document.createElement("strong");
+        name.textContent = file.name;
+
+        const meta = document.createElement("div");
+        meta.className = "file-meta";
+        const size = Number(file.size);
+        meta.textContent = Number.isFinite(size)
+          ? `${(size / 1024 / 1024).toFixed(2)} MB`
+          : "大小未知";
+
+        details.append(name, meta);
+
+        const actions = document.createElement("div");
+        actions.className = "file-actions";
+
+        const deleteButton = document.createElement("button");
+        deleteButton.className = "danger";
+        deleteButton.type = "button";
+        deleteButton.textContent = "刪除";
+
+        deleteButton.addEventListener("click", async () => {
+          if (busy) return;
+
+          const confirmed = window.confirm(
+            `確定要永久刪除「${file.name}」嗎？\n\n` +
+            "此操作無法復原。刪除後會嘗試觸發網站重建。"
+          );
+
+          if (!confirmed) return;
+
+          setBusy(true);
+
+          try {
+            showMessage(`正在刪除 ${file.name}……`);
+
+            const result = await callAdminApi("DELETE", {
+              name: file.name
+            });
+
+            showMessage(result.message);
+
+            if (result.data?.rebuildTriggered !== true) {
+              showMessage(
+                result.message +
+                "\n注意：PDF 已刪除，但 GitHub Actions 未確認觸發成功。"
+              );
+            }
+
+            await loadPdfList();
+          } catch (error) {
+            showMessage(error.message || "刪除失敗。");
+          } finally {
+            setBusy(false);
+          }
+        });
+
+        actions.appendChild(deleteButton);
+        row.append(details, actions);
+        pdfList.appendChild(row);
       }
 
       if (result.data.length === 0) {
-        showMessage("驗證成功，但目前沒有 PDF 檔案。");
-        return;
+        const empty = document.createElement("p");
+        empty.textContent = "目前沒有 PDF 檔案。";
+        pdfList.appendChild(empty);
       }
 
-      for (const file of result.data) {
-        const item = document.createElement("li");
-        const size = Number(file.size);
-
-        item.textContent =
-          `${file.name}（${
-            Number.isFinite(size)
-              ? `${(size / 1024 / 1024).toFixed(2)} MB`
-              : "大小未知"
-          }）`;
-
-        pdfList.appendChild(item);
-      }
-
-      showMessage(`驗證成功，共取得 ${result.data.length} 個 PDF。`);
+      showMessage(`PDF 清單讀取成功，共 ${result.data.length} 個檔案。`);
     }
 
-    form.addEventListener("submit", async (event) => {
+    loginForm.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (busy) return;
 
-      loginButton.disabled = true;
-      clearPdfList();
+      setBusy(true);
       showMessage("正在驗證登入資料……");
 
       try {
         const email = document.getElementById("email").value.trim();
         const password = document.getElementById("password").value;
 
-        const { data, error } =
-          await client.auth.signInWithPassword({
-            email,
-            password
-          });
+        const { data, error } = await client.auth.signInWithPassword({
+          email,
+          password
+        });
+
+        document.getElementById("password").value = "";
 
         if (error || !data.session) {
-          throw new Error(
-            error?.message || "登入失敗，請檢查帳號密碼"
+          throw new Error(error?.message || "登入失敗，請檢查帳號密碼。");
+        }
+
+        accessToken = data.session.access_token;
+        loginPanel.hidden = true;
+        adminPanel.hidden = false;
+
+        await loadPdfList();
+      } catch (error) {
+        showMessage(error.message || "登入失敗。");
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    uploadForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (busy) return;
+
+      const file = pdfInput.files?.[0];
+
+      if (!file) {
+        showMessage("請先選擇 PDF 檔案。");
+        return;
+      }
+
+      if (!file.name.toLowerCase().endsWith(".pdf")) {
+        showMessage("檔案副檔名必須是 .pdf。");
+        return;
+      }
+
+      if (file.size === 0 || file.size > MAX_FILE_SIZE) {
+        showMessage("PDF 不可為空，且大小不得超過 20 MB。");
+        return;
+      }
+
+      setBusy(true);
+
+      try {
+        showMessage(`正在上傳 ${file.name}……`);
+
+        const formData = new FormData();
+        formData.append("file", file, file.name);
+
+        const result = await callAdminApi("POST", formData);
+
+        pdfInput.value = "";
+        showMessage(result.message);
+
+        if (result.data?.rebuildTriggered !== true) {
+          showMessage(
+            result.message +
+            "\n注意：PDF 已上傳，但 GitHub Actions 未確認觸發成功。"
           );
         }
 
-        // 只在記憶體中使用 Token，不顯示或記錄 Token
-        document.getElementById("password").value = "";
-        form.hidden = true;
-        logoutButton.hidden = false;
-
-        await loadPdfList(data.session.access_token);
+        await loadPdfList();
       } catch (error) {
-        showMessage(error.message || "發生未預期錯誤");
+        showMessage(error.message || "上傳失敗。");
       } finally {
-        loginButton.disabled = false;
+        setBusy(false);
+      }
+    });
+
+    refreshButton.addEventListener("click", async () => {
+      if (busy) return;
+
+      setBusy(true);
+      try {
+        await loadPdfList();
+      } catch (error) {
+        showMessage(error.message || "讀取 PDF 清單失敗。");
+      } finally {
+        setBusy(false);
       }
     });
 
     logoutButton.addEventListener("click", async () => {
-      await client.auth.signOut();
-      form.reset();
-      form.hidden = false;
-      logoutButton.hidden = true;
-      clearPdfList();
-      showMessage("已登出。");
+      if (busy) return;
+
+      setBusy(true);
+
+      try {
+        await client.auth.signOut();
+      } finally {
+        accessToken = null;
+        pdfList.replaceChildren();
+        loginForm.reset();
+        adminPanel.hidden = true;
+        loginPanel.hidden = false;
+        showMessage("已登出。");
+        setBusy(false);
+      }
     });
   </script>
 </body>
