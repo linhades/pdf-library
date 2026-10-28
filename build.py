@@ -71,8 +71,10 @@ def main():
         )
 
     pdf_files = sorted(
-        (path for path in PDF_DIR.iterdir()
-         if path.is_file() and path.suffix.lower() == ".pdf"),
+        (
+            path for path in PDF_DIR.iterdir()
+            if path.is_file() and path.suffix.lower() == ".pdf"
+        ),
         key=lambda path: path.name.casefold()
     )
 
@@ -126,10 +128,13 @@ def main():
                 raw_text = page.extract_text() or ""
                 display_text = normalize_text(raw_text)
             except Exception as exc:
-                print(f"[警告] {filename} 第 {page_num} 頁抽取失敗：{exc}")
+                print(
+                    f"[警告] {filename} 第 {page_num} 頁抽取失敗：{exc}"
+                )
                 skipped_pages += 1
                 continue
 
+            # 沒有可搜尋的文字時，不建立索引頁。
             if not display_text:
                 skipped_pages += 1
                 continue
@@ -137,40 +142,22 @@ def main():
             page_filename = f"{book_id}_p{page_num:04d}.html"
             page_path = OUTPUT_DIR / page_filename
 
-            # 使用 pre-wrap 保留換行，但不把 PDF 文字當成 HTML。
             escaped_text = safe_html(display_text)
             escaped_title = safe_html(book_title)
             escaped_pdf_url = safe_html(book_pdf_url)
+
+            # 統一的搜尋結果標題：書名｜PDF 第 N 頁。
+            page_title = f"{book_title}｜PDF 第 {page_num} 頁"
+            escaped_page_title = safe_html(page_title)
 
             html_content = f"""<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{escaped_title}｜PDF 第 {page_num} 頁</title>
+  <title>{escaped_page_title}</title>
   <meta name="description"
-        content="{safe_html(book_title)}，PDF 第 {page_num} 頁全文">
-  <link href="pagefind/pagefind-ui.css" rel="stylesheet">
-  <style>
-    body {{
-      font-family: system-ui, sans-serif;
-      max-width: 900px;
-      margin: 30px auto;
-      padding: 0 20px;
-      line-height: 1.9;
-    }}
-    .page-text {{
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      font-size: 1.05rem;
-    }}
-    .toolbar {{
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
-      margin: 20px 0;
-    }}
-  </style>
+        content="{escaped_title}，PDF 第 {page_num} 頁全文">
 </head>
 <body>
   <nav>
@@ -178,22 +165,25 @@ def main():
   </nav>
 
   <article data-pagefind-body>
-    # <h1>{escaped_title}</h1>
-    <h1>{escaped_title}｜PDF 第 {page_num} 頁</h1>
+    <h1 data-pagefind-meta="title">{escaped_page_title}</h1>
     <h2>PDF 第 {page_num} 頁（共 {total_pages} 頁）</h2>
 
-    <div class="toolbar">
+    <p>
       <a href="{escaped_pdf_url}#page={page_num}"
          target="_blank" rel="noopener">
         開啟原始 PDF 第 {page_num} 頁
       </a>
+    </p>
+
+    <p>
       <a href="{escaped_pdf_url}" target="_blank" rel="noopener">
         開啟完整 PDF
       </a>
-    </div>
+    </p>
 
     <hr>
-    <div class="page-text">{escaped_text}</div>
+    <div class="page-text"
+         style="white-space: pre-wrap; overflow-wrap: anywhere;">{escaped_text}</div>
   </article>
 </body>
 </html>
@@ -202,7 +192,7 @@ def main():
             page_path.write_text(html_content, encoding="utf-8")
             success_pages += 1
 
-    # 產生首頁。
+    # 產生首頁書籍清單資料。
     book_items = []
 
     for book in book_list:
@@ -220,60 +210,75 @@ def main():
 
     books_html = "\n".join(book_items)
 
-    index_html = f"""<!DOCTYPE html>
+    # 首頁使用指定的新版 HTML。
+    # 保留管理員連結及 GitHub Pages 專案路徑。
+    index_html = """<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>線上 PDF 智慧圖書館</title>
-  <link href="pagefind/pagefind-ui.css" rel="stylesheet">
-  <style>
-    body {{
-      font-family: system-ui, sans-serif;
-      max-width: 900px;
-      margin: 30px auto;
-      padding: 0 20px;
-      line-height: 1.7;
-    }}
-    .search-container {{
-      margin: 24px 0;
-      padding: 20px;
-      background: #f5f7fa;
-      border-radius: 12px;
-    }}
-    li {{ margin: 12px 0; }}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF 全文檢索圖書館</title>
+
+    <link href="/pdf-library/pagefind/pagefind-ui.css" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+            line-height: 1.7;
+        }
+
+        .admin-link {
+            float: right;
+            color: #666;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .page-number {
+            display: inline-block;
+            margin: 6px 0;
+            padding: 3px 9px;
+            border-radius: 5px;
+            background: #e8f1ff;
+            color: #174ea6;
+            font-size: 13px;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
-  <h1>📚 線上 PDF 智慧圖書館</h1>
-  <p>搜尋所有已收錄的書籍內文，並從結果開啟對應 PDF 頁面。</p>
+    <a href="/pdf-library/admin/" class="admin-link">
+        ⚙️ 管理員登入後台
+    </a>
 
-  <section class="search-container">
+    <h1>📚 PDF 智慧全文檢索圖書館</h1>
+    <p>輸入關鍵字，搜尋所有書籍內文，並定位到對應 PDF 頁碼。</p>
+
     <div id="search"></div>
-  </section>
 
-  <script src="pagefind/pagefind-ui.js"></script>
-  <script>
-    window.addEventListener("DOMContentLoaded", () => {{
-      new PagefindUI({{
-        element: "#search",
-        showSubResults: true,
-        showImages: false,
-        excerptLength: 30,
-        resetStyles: false
-      }});
-    }});
-  </script>
-
-  <h2>📖 書籍清單</h2>
-  <ul>
-    {books_html}
-  </ul>
+    <script src="/pdf-library/pagefind/pagefind-ui.js"></script>
+    <script>
+        window.addEventListener("DOMContentLoaded", () => {
+            new PagefindUI({
+                element: "#search",
+                showSubResults: true,
+                showImages: false,
+                excerptLength: 30,
+                resetStyles: false
+            });
+        });
+    </script>
 </body>
 </html>
 """
 
-    (OUTPUT_DIR / "index.html").write_text(index_html, encoding="utf-8")
+    (OUTPUT_DIR / "index.html").write_text(
+        index_html,
+        encoding="utf-8"
+    )
 
     print("")
     print("建置完成！")
@@ -281,7 +286,10 @@ def main():
     print(f"成功建立頁面：{success_pages}")
     print(f"略過空白或失敗頁面：{skipped_pages}")
     print(f"輸出位置：{OUTPUT_DIR.resolve()}")
-    print(f"PDF 使用外部網址：{'是' if PDF_BASE_URL else '否，複製至 pages/pdfs'}")
+    print(
+        "PDF 使用外部網址："
+        f"{'是' if PDF_BASE_URL else '否，複製至 pages/pdfs'}"
+    )
 
 
 if __name__ == "__main__":
