@@ -47,7 +47,12 @@ jobs:
               "Content-Type": "application/json",
           }
 
-          def request_json(url, payload):
+          def get_json(url):
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req, timeout=60) as response:
+                  return json.loads(response.read().decode("utf-8"))
+
+          def post_json(url, payload):
               req = urllib.request.Request(
                   url,
                   data=json.dumps(payload).encode("utf-8"),
@@ -57,8 +62,8 @@ jobs:
               with urllib.request.urlopen(req, timeout=60) as response:
                   return json.loads(response.read().decode("utf-8"))
 
-          def download_object(name, destination):
-              encoded_name = urllib.parse.quote(name, safe="")
+          def download_object(storage_name, destination):
+              encoded_name = urllib.parse.quote(storage_name, safe="")
               url = (
                   f"{base_url}/storage/v1/object/"
                   f"{bucket}/{encoded_name}"
@@ -73,18 +78,85 @@ jobs:
               with urllib.request.urlopen(req, timeout=120) as response:
                   destination.write_bytes(response.read())
 
-          downloaded = 0
+          # 先取得 manifest；不存在時使用舊檔名模式。
+          manifest_path = Path("library-manifest.json")
+          manifest_url = (
+              f"{base_url}/storage/v1/object/"
+              f"{bucket}/library-manifest.json"
+          )
+
+          manifest = {"version": 1, "files": []}
+
+          try:
+              req = urllib.request.Request(
+                  manifest_url,
+                  headers={
+                      "apikey": secret_key,
+                      "Authorization": f"Bearer {secret_key}",
+                  },
+              )
+              with urllib.request.urlopen(req, timeout=60) as response:
+                  manifest = json.loads(
+                      response.read().decode("utf-8")
+                  )
+              manifest_path.write_text(
+                  json.dumps(manifest, ensure_ascii=False, indent=2),
+                  encoding="utf-8",
+              )
+              print("已下載書名對照資料。")
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+              if manifest_path.exists():
+                  manifest_path.unlink()
+              print("尚無 manifest，使用舊式檔名模式。")
+
+          # manifest 中的新式檔案：以原始檔名存入本機 pdfs/。
+          manifest_files = manifest.get("files", [])
+          mapped_storage_names = set()
+
+          for item in manifest_files:
+              if not isinstance(item, dict):
+                  continue
+
+              storage_name = item.get("storageName")
+              original_name = item.get("originalName")
+
+              if not isinstance(storage_name, str):
+                  continue
+              if not isinstance(original_name, str):
+                  continue
+              if not original_name.lower().endswith(".pdf"):
+                  continue
+              if (
+                  "/" in original_name
+                  or "\\" in original_name
+                  or original_name in (".", "..")
+              ):
+                  raise RuntimeError(
+                      f"manifest 含有不安全的檔名：{original_name}"
+                  )
+
+              download_object(storage_name, pdf_dir / original_name)
+              mapped_storage_names.add(storage_name)
+              print(f"已下載 PDF：{original_name}")
+
+          # 舊式檔案：manifest 未管理的根目錄 PDF 仍以原檔名下載。
           offset = 0
           limit = 100
+          downloaded_legacy = 0
 
           while True:
-              items = request_json(
+              items = post_json(
                   f"{base_url}/storage/v1/object/list/{bucket}",
                   {
                       "prefix": "",
                       "limit": limit,
                       "offset": offset,
-                      "sortBy": {"column": "name", "order": "asc"},
+                      "sortBy": {
+                          "column": "name",
+                          "order": "asc",
+                      },
                   },
               )
 
@@ -94,41 +166,31 @@ jobs:
               for item in items:
                   name = item.get("name", "")
 
-                  if name == "library-manifest.json":
-                      try:
-                          download_object(
-                              name,
-                              Path("library-manifest.json"),
-                          )
-                          print("已下載書名對照資料。")
-                      except urllib.error.HTTPError as exc:
-                          if exc.code != 404:
-                              raise
-                      continue
-
-                  # 只下載根目錄中的 PDF。
                   if (
                       not name
                       or "/" in name
                       or not name.lower().endswith(".pdf")
+                      or name in mapped_storage_names
                   ):
                       continue
 
-                  download_object(name, pdf_dir / name)
-                  downloaded += 1
-                  print(f"已下載 PDF：{name}")
+                  destination = pdf_dir / name
+                  download_object(name, destination)
+                  downloaded_legacy += 1
+                  print(f"已下載舊式 PDF：{name}")
 
               if len(items) < limit:
                   break
 
               offset += len(items)
 
-          if downloaded == 0:
+          pdf_files = list(pdf_dir.glob("*.pdf"))
+          if not pdf_files:
               raise RuntimeError(
                   "Supabase Storage 中沒有找到 PDF，停止建置。"
               )
 
-          print(f"PDF 下載完成，共 {downloaded} 個檔案。")
+          print(f"PDF 下載完成，共 {len(pdf_files)} 個本機檔案。")
           PY
 
       - name: 安裝 PDF 文字抽取套件
