@@ -178,7 +178,8 @@ def main():
   </nav>
 
   <article data-pagefind-body>
-    <h1>{escaped_title}</h1>
+    # <h1>{escaped_title}</h1>
+    <h1>{escaped_title}｜PDF 第 {page_num} 頁</h1>
     <h2>PDF 第 {page_num} 頁（共 {total_pages} 頁）</h2>
 
     <div class="toolbar">
