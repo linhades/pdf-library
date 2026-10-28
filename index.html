@@ -23,15 +23,12 @@
             font-size: 14px;
         }
 
-        .page-number {
-            display: inline-block;
-            margin: 6px 0;
-            padding: 3px 9px;
-            border-radius: 5px;
-            background: #e8f1ff;
-            color: #174ea6;
-            font-size: 13px;
-            font-weight: bold;
+        .search-container {
+            margin: 24px 0;
+        }
+
+        .book-list li {
+            margin: 12px 0;
         }
     </style>
 </head>
@@ -43,7 +40,9 @@
     <h1>📚 PDF 智慧全文檢索圖書館</h1>
     <p>輸入關鍵字，搜尋所有書籍內文，並定位到對應 PDF 頁碼。</p>
 
-    <div id="search"></div>
+    <section class="search-container">
+        <div id="search"></div>
+    </section>
 
     <script src="/pdf-library/pagefind/pagefind-ui.js"></script>
     <script>
@@ -57,5 +56,12 @@
             });
         });
     </script>
+
+    <hr>
+
+    <h2>📖 書籍清單</h2>
+    <ul class="book-list">
+        <li><a href="book_319697ca7596_p0001.html">四聖諦</a>（416 頁）｜<a href="pdfs/%E5%9B%9B%E8%81%96%E8%AB%A6.pdf" target="_blank" rel="noopener">閱讀 PDF</a></li>
+    </ul>
 </body>
 </html>
