@@ -192,7 +192,8 @@ def main():
             page_path.write_text(html_content, encoding="utf-8")
             success_pages += 1
 
-    # 產生首頁書籍清單資料。
+
+ # 產生首頁書籍清單資料。
     book_items = []
 
     for book in book_list:
@@ -202,17 +203,18 @@ def main():
         total_pages = book["total_pages"]
 
         book_items.append(
-            f'<li><a href="{book_id}_p0001.html">{title}</a>'
+            f'<li>'
+            f'<a href="{book_id}_p0001.html">{title}</a>'
             f'（{total_pages} 頁）'
             f'｜<a href="{book_link}" target="_blank" rel="noopener">'
-            f'閱讀 PDF</a></li>'
+            f'閱讀 PDF</a>'
+            f'</li>'
         )
 
     books_html = "\n".join(book_items)
 
-    # 首頁使用指定的新版 HTML。
-    # 保留管理員連結及 GitHub Pages 專案路徑。
-    index_html = """<!DOCTYPE html>
+    # 新版首頁：保留管理員登入、全文搜尋及動態書籍清單。
+    index_html = f"""<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
@@ -222,31 +224,28 @@ def main():
     <link href="/pdf-library/pagefind/pagefind-ui.css" rel="stylesheet">
 
     <style>
-        body {
+        body {{
             font-family: sans-serif;
             max-width: 900px;
             margin: 40px auto;
             padding: 0 20px;
             line-height: 1.7;
-        }
+        }}
 
-        .admin-link {
+        .admin-link {{
             float: right;
             color: #666;
             text-decoration: none;
             font-size: 14px;
-        }
+        }}
 
-        .page-number {
-            display: inline-block;
-            margin: 6px 0;
-            padding: 3px 9px;
-            border-radius: 5px;
-            background: #e8f1ff;
-            color: #174ea6;
-            font-size: 13px;
-            font-weight: bold;
-        }
+        .search-container {{
+            margin: 24px 0;
+        }}
+
+        .book-list li {{
+            margin: 12px 0;
+        }}
     </style>
 </head>
 <body>
@@ -257,20 +256,29 @@ def main():
     <h1>📚 PDF 智慧全文檢索圖書館</h1>
     <p>輸入關鍵字，搜尋所有書籍內文，並定位到對應 PDF 頁碼。</p>
 
-    <div id="search"></div>
+    <section class="search-container">
+        <div id="search"></div>
+    </section>
 
     <script src="/pdf-library/pagefind/pagefind-ui.js"></script>
     <script>
-        window.addEventListener("DOMContentLoaded", () => {
-            new PagefindUI({
+        window.addEventListener("DOMContentLoaded", () => {{
+            new PagefindUI({{
                 element: "#search",
                 showSubResults: true,
                 showImages: false,
                 excerptLength: 30,
                 resetStyles: false
-            });
-        });
+            }});
+        }});
     </script>
+
+    <hr>
+
+    <h2>📖 書籍清單</h2>
+    <ul class="book-list">
+        {books_html}
+    </ul>
 </body>
 </html>
 """
