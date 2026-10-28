@@ -105,11 +105,35 @@ jobs:
               )
               print("已下載書名對照資料。")
           except urllib.error.HTTPError as exc:
-              if exc.code != 404:
+              error_body = exc.read().decode("utf-8", errors="replace")
+              print(f"Manifest HTTP 狀態：{exc.code}")
+              print(f"Manifest 錯誤內容：{error_body}")
+
+              try:
+                  error_data = json.loads(error_body)
+              except json.JSONDecodeError:
+                  error_data = {}
+
+              error_text = (
+                  str(error_data.get("message", ""))
+                  + " "
+                  + str(error_data.get("error", ""))
+              ).lower()
+
+              is_missing_manifest = (
+                  exc.code == 404
+                  or str(error_data.get("statusCode", "")) == "404"
+                  or "object not found" in error_text
+              )
+
+              if not is_missing_manifest:
                   raise
+
               if manifest_path.exists():
                   manifest_path.unlink()
+
               print("尚無 manifest，使用舊式檔名模式。")
+
 
           # manifest 中的新式檔案：以原始檔名存入本機 pdfs/。
           manifest_files = manifest.get("files", [])
