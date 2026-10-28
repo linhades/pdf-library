@@ -238,8 +238,10 @@
 
       if (!response.ok || result.success !== true) {
         throw new Error(
-          result.message || result.error ||
-          `請求失敗（HTTP ${response.status}）`
+  result.message ||
+  result.error ||
+  result.details ||
+  `請求失敗（HTTP ${response.status}）`
         );
       }
 
@@ -295,7 +297,7 @@
             showMessage(`正在刪除 ${file.name}……`);
 
             const result = await callAdminApi("DELETE", {
-              name: file.name
+              storageName: file.storageName
             });
 
             showMessage(result.message);
