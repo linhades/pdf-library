@@ -49,6 +49,11 @@ jobs:
           test -f pages/index.html
           echo "Pagefind 索引檔案已建立"
 
+      - name: 複製管理員後台
+        run: |
+          mkdir -p pages/admin
+          cp -R admin/. pages/admin/
+
       - name: 部署到 GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
