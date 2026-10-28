@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: 從 Supabase 下載 PDF
+      - name: 從 Supabase 下載 PDF 與書名對照資料
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
@@ -57,6 +57,22 @@ jobs:
               with urllib.request.urlopen(req, timeout=60) as response:
                   return json.loads(response.read().decode("utf-8"))
 
+          def download_object(name, destination):
+              encoded_name = urllib.parse.quote(name, safe="")
+              url = (
+                  f"{base_url}/storage/v1/object/"
+                  f"{bucket}/{encoded_name}"
+              )
+              req = urllib.request.Request(
+                  url,
+                  headers={
+                      "apikey": secret_key,
+                      "Authorization": f"Bearer {secret_key}",
+                  },
+              )
+              with urllib.request.urlopen(req, timeout=120) as response:
+                  destination.write_bytes(response.read())
+
           downloaded = 0
           offset = 0
           limit = 100
@@ -78,25 +94,27 @@ jobs:
               for item in items:
                   name = item.get("name", "")
 
-                  # 只下載根目錄中的 PDF，不處理子資料夾。
-                  if not name or "/" in name or not name.lower().endswith(".pdf"):
+                  if name == "library-manifest.json":
+                      try:
+                          download_object(
+                              name,
+                              Path("library-manifest.json"),
+                          )
+                          print("已下載書名對照資料。")
+                      except urllib.error.HTTPError as exc:
+                          if exc.code != 404:
+                              raise
                       continue
 
-                  encoded_name = urllib.parse.quote(name, safe="")
-                  url = (
-                      f"{base_url}/storage/v1/object/"
-                      f"{bucket}/{encoded_name}"
-                  )
+                  # 只下載根目錄中的 PDF。
+                  if (
+                      not name
+                      or "/" in name
+                      or not name.lower().endswith(".pdf")
+                  ):
+                      continue
 
-                  req = urllib.request.Request(url, headers={
-                      "apikey": secret_key,
-                      "Authorization": f"Bearer {secret_key}",
-                  })
-
-                  destination = pdf_dir / name
-                  with urllib.request.urlopen(req, timeout=120) as response:
-                      destination.write_bytes(response.read())
-
+                  download_object(name, pdf_dir / name)
                   downloaded += 1
                   print(f"已下載 PDF：{name}")
 
@@ -107,7 +125,7 @@ jobs:
 
           if downloaded == 0:
               raise RuntimeError(
-                  "Supabase Storage 中沒有找到根目錄 PDF，停止建置。"
+                  "Supabase Storage 中沒有找到 PDF，停止建置。"
               )
 
           print(f"PDF 下載完成，共 {downloaded} 個檔案。")
