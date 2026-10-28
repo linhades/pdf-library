@@ -1,5 +1,6 @@
 import hashlib
 import html
+import json
 import os
 import re
 import shutil
@@ -12,56 +13,91 @@ from pypdf import PdfReader
 
 PDF_DIR = Path("pdfs")
 OUTPUT_DIR = Path("pages")
+MANIFEST_PATH = Path("library-manifest.json")
 
-# 如果設定 PDF_BASE_URL，就從外部檔案服務讀取 PDF。
-# 例如：https://你的檔案服務.example/books
-# 不設定時，會將 PDF 複製到 pages/pdfs/ 一起部署。
 PDF_BASE_URL = os.environ.get("PDF_BASE_URL", "").strip().rstrip("/")
 
 
 def normalize_text(text: str) -> str:
-    """正規化文字，改善全形字、相容漢字及空白造成的搜尋問題。"""
     text = unicodedata.normalize("NFKC", text or "")
-    text = text.replace("\u00a0", " ")
-    text = text.replace("\u3000", " ")
-
-    # 移除控制字元，但保留換行與 Tab。
+    text = text.replace("\u00a0", " ").replace("\u3000", " ")
     text = "".join(
         char for char in text
         if char in "\n\t" or not unicodedata.category(char).startswith("C")
     )
 
-    # 清理每行空白，保留段落與換行。
-    lines = []
-    for line in text.splitlines():
-        line = re.sub(r"[ \t]+", " ", line).strip()
-        lines.append(line)
-
+    lines = [
+        re.sub(r"[ \t]+", " ", line).strip()
+        for line in text.splitlines()
+    ]
     text = "\n".join(lines)
     text = re.sub(r"\n{3,}", "\n\n", text)
-
     return text.strip()
 
 
 def safe_html(value: str) -> str:
-    """將文字安全地放入 HTML。"""
     return html.escape(value, quote=True)
 
 
 def html_filename(filename: str) -> str:
-    """使用檔名雜湊，避免不同書名產生同名 HTML。"""
     digest = hashlib.sha1(filename.encode("utf-8")).hexdigest()[:12]
     return f"book_{digest}"
 
 
-def pdf_url(filename: str) -> str:
-    """產生 PDF 網址，正確處理中文檔名與空白。"""
-    encoded_name = quote(filename, safe="")
+def load_manifest() -> dict:
+    """讀取管理後台產生的檔名對照；尚未建立時使用空對照。"""
+    if not MANIFEST_PATH.exists():
+        print("尚未找到 library-manifest.json，使用舊檔名模式。")
+        return {}
+
+    try:
+        data = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            f"無法讀取 {MANIFEST_PATH}，為避免產生錯誤連結，停止建置：{exc}"
+        ) from exc
+
+    files = data.get("files", [])
+    if not isinstance(files, list):
+        raise RuntimeError("library-manifest.json 的 files 必須是陣列。")
+
+    mapping = {}
+
+    for item in files:
+        if not isinstance(item, dict):
+            continue
+
+        original_name = item.get("originalName")
+        storage_name = item.get("storageName")
+        title = item.get("title")
+
+        if (
+            isinstance(original_name, str)
+            and isinstance(storage_name, str)
+            and original_name.lower().endswith(".pdf")
+            and storage_name.lower().endswith(".pdf")
+        ):
+            mapping[original_name] = {
+                "storage_name": storage_name,
+                "title": title if isinstance(title, str) and title.strip()
+                else Path(original_name).stem,
+            }
+
+    return mapping
+
+
+def pdf_url(local_filename: str, manifest: dict) -> str:
+    """以本機原始檔名查找 Storage 檔名；舊檔案沿用原本名稱。"""
+    entry = manifest.get(local_filename)
+    storage_name = (
+        entry["storage_name"] if entry else local_filename
+    )
+    encoded_name = quote(storage_name, safe="")
 
     if PDF_BASE_URL:
         return f"{PDF_BASE_URL}/{encoded_name}"
 
-    return f"pdfs/{encoded_name}"
+    return f"pdfs/{quote(local_filename, safe='')}"
 
 
 def main():
@@ -81,17 +117,16 @@ def main():
     if not pdf_files:
         raise RuntimeError("pdfs 資料夾內沒有找到 PDF 檔案。")
 
-    # 清除上次建置產物，避免舊書頁面被再次索引。
+    manifest = load_manifest()
+
     if OUTPUT_DIR.exists():
         shutil.rmtree(OUTPUT_DIR)
 
     OUTPUT_DIR.mkdir(parents=True)
 
-    # 未設定外部 PDF 網址時，將 PDF 複製到發布目錄。
     if not PDF_BASE_URL:
         published_pdf_dir = OUTPUT_DIR / "pdfs"
         published_pdf_dir.mkdir(parents=True)
-
         for source in pdf_files:
             shutil.copy2(source, published_pdf_dir / source.name)
 
@@ -101,11 +136,14 @@ def main():
 
     for pdf_path in pdf_files:
         filename = pdf_path.name
-        book_title = pdf_path.stem
+        entry = manifest.get(filename)
+        book_title = (
+            entry["title"] if entry else pdf_path.stem
+        )
         book_id = html_filename(filename)
-        book_pdf_url = pdf_url(filename)
+        book_pdf_url = pdf_url(filename, manifest)
 
-        print(f"正在處理：{filename}")
+        print(f"正在處理：{filename}（書名：{book_title}）")
 
         try:
             reader = PdfReader(str(pdf_path))
@@ -125,8 +163,7 @@ def main():
             page_num = index + 1
 
             try:
-                raw_text = page.extract_text() or ""
-                display_text = normalize_text(raw_text)
+                display_text = normalize_text(page.extract_text() or "")
             except Exception as exc:
                 print(
                     f"[警告] {filename} 第 {page_num} 頁抽取失敗：{exc}"
@@ -134,7 +171,6 @@ def main():
                 skipped_pages += 1
                 continue
 
-            # 沒有可搜尋的文字時，不建立索引頁。
             if not display_text:
                 skipped_pages += 1
                 continue
@@ -145,8 +181,6 @@ def main():
             escaped_text = safe_html(display_text)
             escaped_title = safe_html(book_title)
             escaped_pdf_url = safe_html(book_pdf_url)
-
-            # 統一的搜尋結果標題：書名｜PDF 第 N 頁。
             page_title = f"{book_title}｜PDF 第 {page_num} 頁"
             escaped_page_title = safe_html(page_title)
 
@@ -156,44 +190,32 @@ def main():
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{escaped_page_title}</title>
-  <meta name="description"
-        content="{escaped_title}，PDF 第 {page_num} 頁全文">
+  <meta name="description" content="{escaped_title}，PDF 第 {page_num} 頁全文">
 </head>
 <body>
-  <nav>
-    <a href="index.html">← 返回圖書館首頁</a>
-  </nav>
-
+  <nav><a href="index.html">← 返回圖書館首頁</a></nav>
   <article data-pagefind-body>
     <h1 data-pagefind-meta="title">{escaped_page_title}</h1>
     <h2>PDF 第 {page_num} 頁（共 {total_pages} 頁）</h2>
-
     <p>
-      <a href="{escaped_pdf_url}#page={page_num}"
-         target="_blank" rel="noopener">
+      <a href="{escaped_pdf_url}#page={page_num}" target="_blank" rel="noopener">
         開啟原始 PDF 第 {page_num} 頁
       </a>
     </p>
-
     <p>
       <a href="{escaped_pdf_url}" target="_blank" rel="noopener">
         開啟完整 PDF
       </a>
     </p>
-
     <hr>
-    <div class="page-text"
-         style="white-space: pre-wrap; overflow-wrap: anywhere;">{escaped_text}</div>
+    <div class="page-text" style="white-space: pre-wrap; overflow-wrap: anywhere;">{escaped_text}</div>
   </article>
 </body>
 </html>
 """
-
             page_path.write_text(html_content, encoding="utf-8")
             success_pages += 1
 
-
- # 產生首頁書籍清單資料。
     book_items = []
 
     for book in book_list:
@@ -203,26 +225,21 @@ def main():
         total_pages = book["total_pages"]
 
         book_items.append(
-            f'<li>'
-            f'<a href="{book_id}_p0001.html">{title}</a>'
+            f'<li><a href="{book_id}_p0001.html">{title}</a>'
             f'（{total_pages} 頁）'
             f'｜<a href="{book_link}" target="_blank" rel="noopener">'
-            f'閱讀 PDF</a>'
-            f'</li>'
+            f'閱讀 PDF</a></li>'
         )
 
     books_html = "\n".join(book_items)
 
-    # 新版首頁：保留管理員登入、全文搜尋及動態書籍清單。
     index_html = f"""<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF 全文檢索圖書館</title>
-
     <link href="/pdf-library/pagefind/pagefind-ui.css" rel="stylesheet">
-
     <style>
         body {{
             font-family: sans-serif;
@@ -231,35 +248,21 @@ def main():
             padding: 0 20px;
             line-height: 1.7;
         }}
-
         .admin-link {{
             float: right;
             color: #666;
             text-decoration: none;
             font-size: 14px;
         }}
-
-        .search-container {{
-            margin: 24px 0;
-        }}
-
-        .book-list li {{
-            margin: 12px 0;
-        }}
+        .search-container {{ margin: 24px 0; }}
+        .book-list li {{ margin: 12px 0; }}
     </style>
 </head>
 <body>
-    <a href="/pdf-library/admin/" class="admin-link">
-        ⚙️ 管理員登入後台
-    </a>
-
+    <a href="/pdf-library/admin/" class="admin-link">⚙️ 管理員登入後台</a>
     <h1>📚 PDF 智慧全文檢索圖書館</h1>
     <p>輸入關鍵字，搜尋所有書籍內文，並定位到對應 PDF 頁碼。</p>
-
-    <section class="search-container">
-        <div id="search"></div>
-    </section>
-
+    <section class="search-container"><div id="search"></div></section>
     <script src="/pdf-library/pagefind/pagefind-ui.js"></script>
     <script>
         window.addEventListener("DOMContentLoaded", () => {{
@@ -272,9 +275,7 @@ def main():
             }});
         }});
     </script>
-
     <hr>
-
     <h2>📖 書籍清單</h2>
     <ul class="book-list">
         {books_html}
@@ -283,10 +284,7 @@ def main():
 </html>
 """
 
-    (OUTPUT_DIR / "index.html").write_text(
-        index_html,
-        encoding="utf-8"
-    )
+    (OUTPUT_DIR / "index.html").write_text(index_html, encoding="utf-8")
 
     print("")
     print("建置完成！")
@@ -294,10 +292,7 @@ def main():
     print(f"成功建立頁面：{success_pages}")
     print(f"略過空白或失敗頁面：{skipped_pages}")
     print(f"輸出位置：{OUTPUT_DIR.resolve()}")
-    print(
-        "PDF 使用外部網址："
-        f"{'是' if PDF_BASE_URL else '否，複製至 pages/pdfs'}"
-    )
+    print(f"PDF 使用外部網址：{'是' if PDF_BASE_URL else '否，複製至 pages/pdfs'}")
 
 
 if __name__ == "__main__":
