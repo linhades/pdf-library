@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF 全文檢索圖書館</title>
-
     <link href="/pdf-library/pagefind/pagefind-ui.css" rel="stylesheet">
-
     <style>
         body {
             font-family: sans-serif;
@@ -15,35 +13,21 @@
             padding: 0 20px;
             line-height: 1.7;
         }
-
         .admin-link {
             float: right;
             color: #666;
             text-decoration: none;
             font-size: 14px;
         }
-
-        .search-container {
-            margin: 24px 0;
-        }
-
-        .book-list li {
-            margin: 12px 0;
-        }
+        .search-container { margin: 24px 0; }
+        .book-list li { margin: 12px 0; }
     </style>
 </head>
 <body>
-    <a href="/pdf-library/admin/" class="admin-link">
-        ⚙️ 管理員登入後台
-    </a>
-
+    <a href="/pdf-library/admin/" class="admin-link">⚙️ 管理員登入後台</a>
     <h1>📚 PDF 智慧全文檢索圖書館</h1>
     <p>輸入關鍵字，搜尋所有書籍內文，並定位到對應 PDF 頁碼。</p>
-
-    <section class="search-container">
-        <div id="search"></div>
-    </section>
-
+    <section class="search-container"><div id="search"></div></section>
     <script src="/pdf-library/pagefind/pagefind-ui.js"></script>
     <script>
         window.addEventListener("DOMContentLoaded", () => {
@@ -56,9 +40,7 @@
             });
         });
     </script>
-
     <hr>
-
     <h2>📖 書籍清單</h2>
     <ul class="book-list">
         <li><a href="book_b49cf956b44b_p0001.html">114八正道</a>（286 頁）｜<a href="https://trxonorxzwryzwmswrew.supabase.co/storage/v1/object/public/library-pdfs/114%E5%85%AB%E6%AD%A3%E9%81%93.pdf" target="_blank" rel="noopener">閱讀 PDF</a></li>
