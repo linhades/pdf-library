@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDF 圖書館管理員登入測試</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 680px;
+      margin: 40px auto;
+      padding: 0 20px;
+      line-height: 1.6;
+    }
+    input, button {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 12px;
+      margin: 6px 0 14px;
+      font-size: 16px;
+    }
+    button { cursor: pointer; }
+    #message {
+      padding: 12px;
+      background: #f3f4f6;
+      overflow-wrap: anywhere;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #f3f4f6;
+      padding: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>PDF 圖書館管理員登入測試</h1>
+  <p>此頁面只用於測試登入與讀取 PDF 清單。</p>
+
+  <form id="login-form">
+    <label for="email">管理員 Email</label>
+    <input id="email" type="email" autocomplete="username"
+      required>
+
+    <label for="password">管理員密碼</label>
+    <input id="password" type="password"
+      autocomplete="current-password" required>
+
+    <button id="login-button" type="submit">登入並讀取 PDF</button>
+  </form>
+
+  <button id="logout-button" type="button" hidden>
+    登出
+  </button>
+
+  <h2>測試結果</h2>
+  <div id="message" role="status" aria-live="polite">
+    尚未登入
+  </div>
+  <ul id="pdf-list"></ul>
+
+  <script>
+    // 請替換成你自己的 Supabase 公開設定
+    const SUPABASE_URL = "https://trxonorxzwryzwmswrew.supabase.co";
+    const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_Lz9XnzLTElFDdzviVAyc1A___AS9Fh_";
+
+    const FUNCTION_URL =
+      `${SUPABASE_URL}/functions/v1/pdf-admin`;
+
+    const client = supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_PUBLISHABLE_KEY,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: true,
+          detectSessionInUrl: false
+        }
+      }
+    );
+
+    const form = document.getElementById("login-form");
+    const loginButton = document.getElementById("login-button");
+    const logoutButton = document.getElementById("logout-button");
+    const message = document.getElementById("message");
+    const pdfList = document.getElementById("pdf-list");
+
+    function showMessage(text) {
+      message.textContent = text;
+    }
+
+    function clearPdfList() {
+      pdfList.replaceChildren();
+    }
+
+    async function loadPdfList(accessToken) {
+      showMessage("登入成功，正在讀取 PDF 清單……");
+      clearPdfList();
+
+      const response = await fetch(FUNCTION_URL, {
+        method: "GET",
+        headers: {
+          "apikey": SUPABASE_PUBLISHABLE_KEY,
+          "Authorization": `Bearer ${accessToken}`
+        }
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          `HTTP ${response.status}：${
+            result.message || result.error || "請求失敗"
+          }`
+        );
+      }
+
+      if (result.success !== true || !Array.isArray(result.data)) {
+        throw new Error("伺服器回傳格式不符合預期");
+      }
+
+      if (result.data.length === 0) {
+        showMessage("驗證成功，但目前沒有 PDF 檔案。");
+        return;
+      }
+
+      for (const file of result.data) {
+        const item = document.createElement("li");
+        const size = Number(file.size);
+
+        item.textContent =
+          `${file.name}（${
+            Number.isFinite(size)
+              ? `${(size / 1024 / 1024).toFixed(2)} MB`
+              : "大小未知"
+          }）`;
+
+        pdfList.appendChild(item);
+      }
+
+      showMessage(`驗證成功，共取得 ${result.data.length} 個 PDF。`);
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      loginButton.disabled = true;
+      clearPdfList();
+      showMessage("正在驗證登入資料……");
+
+      try {
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value;
+
+        const { data, error } =
+          await client.auth.signInWithPassword({
+            email,
+            password
+          });
+
+        if (error || !data.session) {
+          throw new Error(
+            error?.message || "登入失敗，請檢查帳號密碼"
+          );
+        }
+
+        // 只在記憶體中使用 Token，不顯示或記錄 Token
+        document.getElementById("password").value = "";
+        form.hidden = true;
+        logoutButton.hidden = false;
+
+        await loadPdfList(data.session.access_token);
+      } catch (error) {
+        showMessage(error.message || "發生未預期錯誤");
+      } finally {
+        loginButton.disabled = false;
+      }
+    });
+
+    logoutButton.addEventListener("click", async () => {
+      await client.auth.signOut();
+      form.reset();
+      form.hidden = false;
+      logoutButton.hidden = true;
+      clearPdfList();
+      showMessage("已登出。");
+    });
+  </script>
+</body>
+</html>
